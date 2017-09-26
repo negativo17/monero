@@ -1,3 +1,4 @@
+%define _hardened_build 1
 # Running tests requires ~30 minutes and a fully synced blockchain
 %global with_tests 0
 
@@ -5,10 +6,12 @@ Name:           monero
 Version:        0.11.0.0
 Release:        1%{?dist}
 Summary:        Monero: the secure, private, untraceable cryptocurrency
-
 License:        BSD
 URL:            https://getmonero.org
+
 Source0:        https://github.com/monero-project/%{name}/archive/v%{version}.tar.gz#/%{name}-%{version}.tar.gz
+Source1:        %{name}-tmpfiles.conf
+Source2:        %{name}.service
 
 BuildRequires:  boost-devel
 BuildRequires:  cmake
@@ -22,11 +25,11 @@ BuildRequires:  libunwind-devel
 BuildRequires:  lzma-devel
 BuildRequires:  miniupnpc-devel
 BuildRequires:  openssl-devel
-#BuildRequires:  rapidjson-devel
 BuildRequires:  readline-devel
+BuildRequires:  systemd
 BuildRequires:  unbound-devel
-#BuildRequires:  pkg-config
-#Requires:       
+
+Requires(pre):  shadow-utils
 
 %description
 Monero is a private, secure, untraceable, decentralised digital currency. You
@@ -72,12 +75,52 @@ make test
 %install
 %make_install
 
+mkdir -p %{buildroot}%{_sbindir}
+mv %{buildroot}%{_bindir}/monerod %{buildroot}%{_sbindir}/monerod
+
+# Temporary files
+mkdir -p %{buildroot}%{_tmpfilesdir}
+install -m 0644 %{SOURCE1} %{buildroot}%{_tmpfilesdir}/%{name}.conf
+install -d -m 0755 %{buildroot}/run/%{name}/
+touch %{buildroot}/run/%{name}.pid
+chmod 0644 %{buildroot}/run/%{name}.pid
+
+# Install ancillary files
+install -m600 -p -D utils/conf/monerod.conf %{buildroot}%{_sysconfdir}/monerod.conf
+install -m600 -p -D %{SOURCE2} %{buildroot}%{_unitdir}/%{name}.service
+install -d -m750 -p %{buildroot}%{_sharedstatedir}/%{name}
+
+%pre
+getent group %{name} >/dev/null || groupadd -r %{name}
+getent passwd %{name} >/dev/null ||
+    useradd -r -g %{name} -d /var/lib/%{name} -s /sbin/nologin \
+    -c "Monero Full Node" %{name}
+exit 0
+
+%post
+%systemd_post %{name}.service
+
+%posttrans
+/usr/bin/systemd-tmpfiles --create
+
+%preun
+%systemd_preun %{name}.service
+
+%postun
+%systemd_postun_with_restart %{name}.service
+
 %files
 %license LICENSE
 %doc CONTRIBUTING.md README.i18n.md README.md VULNERABILITY_RESPONSE_PROCESS.md
-%{_bindir}/monero-wallet-cli
-%{_bindir}/monero-wallet-rpc
-%{_bindir}/monerod
+%dir %attr(750,%{name},%{name}) %{_sharedstatedir}/%{name}
+%dir /run/%{name}/
+%verify(not size mtime md5) /run/%{name}.pid
+%config(noreplace) %attr(64,%{name},%{name}) %{_sysconfdir}/%{name}d.conf
+%{_bindir}/%{name}-wallet-cli
+%{_bindir}/%{name}-wallet-rpc
+%{_sbindir}/%{name}d
+%{_tmpfilesdir}/%{name}.conf
+%{_unitdir}/%{name}.service
 
 %changelog
 * Fri Sep 22 2017 Simone Caronni <negativo17@gmail.com> - 0.11.0.0-1

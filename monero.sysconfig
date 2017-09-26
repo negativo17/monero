@@ -1,0 +1,11 @@
+# Provide options to the monerod daemon here, for example
+# OPTIONS="--testnet --hide-my-port --limit-rate-up 1024"
+
+OPTIONS=""
+
+# System service defaults.
+# Don't change these unless you know what you're doing.
+CONFIG_FILE="/etc/monerod.conf"
+DATA_DIR="/var/lib/monero"
+PID_FILE="/run/monerod/monerod.pid"
+
